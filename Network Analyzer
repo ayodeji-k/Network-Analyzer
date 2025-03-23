@@ -1,0 +1,44 @@
+import pyshark
+import argparse
+from collections import Counter
+
+# Function to capture live packets
+def live_capture(interface, packet_count):
+    print(f"Starting live capture on interface: {interface}")
+    capture = pyshark.LiveCapture(interface=interface)
+    packets = []
+    for packet in capture.sniff_continuously(packet_count=packet_count):
+        packets.append(packet)
+        print(packet)
+    return packets
+
+# Function to analyze a pcap file
+def analyze_pcap(file_path):
+    print(f"Analyzing PCAP file: {file_path}")
+    capture = pyshark.FileCapture(file_path)
+    protocol_counter = Counter()
+    
+    for packet in capture:
+        if hasattr(packet, 'highest_layer'):
+            protocol_counter[packet.highest_layer] += 1
+    
+    print("Protocol distribution:")
+    for protocol, count in protocol_counter.items():
+        print(f"{protocol}: {count} packets")
+    
+    return protocol_counter
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Network Traffic Analyzer")
+    parser.add_argument("-i", "--interface", help="Network interface for live capture")
+    parser.add_argument("-f", "--file", help="PCAP file for offline analysis")
+    parser.add_argument("-c", "--count", type=int, default=10, help="Number of packets to capture (default: 10)")
+    
+    args = parser.parse_args()
+    
+    if args.file:
+        analyze_pcap(args.file)
+    elif args.interface:
+        live_capture(args.interface, args.count)
+    else:
+        print("Please specify either an interface for live capture or a PCAP file for analysis.")
