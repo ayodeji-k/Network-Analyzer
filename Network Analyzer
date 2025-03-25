@@ -1,38 +1,84 @@
-import pyshark
+import pyshark  
 import argparse
 from collections import Counter
+from datetime import datetime
+import sys
 
-# Function to capture live packets
 def live_capture(interface, packet_count):
-    print(f"Starting live capture on interface: {interface}")
-    capture = pyshark.LiveCapture(interface=interface)
-    packets = []
-    for packet in capture.sniff_continuously(packet_count=packet_count):
-        packets.append(packet)
-        print(packet)
-    return packets
+    try:
+        print(f"Starting live capture on interface: {interface}")
+        capture = pyshark.LiveCapture(interface=interface)
+        packets = []
+        
+        for packet in capture.sniff_continuously(packet_count=packet_count):
+            packets.append(packet)
+            print_packet_info(packet)
+            
+        return packets
+    except Exception as e:
+        print(f"Error during live capture: {str(e)}")
+        sys.exit(1)
 
-# Function to analyze a pcap file
+def print_packet_info(packet):
+    timestamp = datetime.fromtimestamp(float(packet.sniff_timestamp))
+    print(f"\nPacket captured at {timestamp}")
+    print(f"Protocol: {packet.highest_layer}")
+    
+    if hasattr(packet, 'ip'):
+        print(f"Source IP: {packet.ip.src}")
+        print(f"Destination IP: {packet.ip.dst}")
+    
+    if hasattr(packet, 'tcp'):
+        print(f"Source Port: {packet.tcp.srcport}")
+        print(f"Destination Port: {packet.tcp.dstport}")
+
 def analyze_pcap(file_path):
-    print(f"Analyzing PCAP file: {file_path}")
-    capture = pyshark.FileCapture(file_path)
-    protocol_counter = Counter()
-    
-    for packet in capture:
-        if hasattr(packet, 'highest_layer'):
-            protocol_counter[packet.highest_layer] += 1
-    
-    print("Protocol distribution:")
-    for protocol, count in protocol_counter.items():
-        print(f"{protocol}: {count} packets")
-    
-    return protocol_counter
+    try:
+        print(f"Analyzing PCAP file: {file_path}")
+        capture = pyshark.FileCapture(file_path)
+        protocol_counter = Counter()
+        ip_counter = Counter()
+        port_counter = Counter()
+        
+        for packet in capture:
+            if hasattr(packet, 'highest_layer'):
+                protocol_counter[packet.highest_layer] += 1
+            
+            if hasattr(packet, 'ip'):
+                ip_counter[packet.ip.src] += 1
+                ip_counter[packet.ip.dst] += 1
+            
+            if hasattr(packet, 'tcp'):
+                port_counter[packet.tcp.srcport] += 1
+                port_counter[packet.tcp.dstport] += 1
+        
+        print("\nProtocol distribution:")
+        for protocol, count in protocol_counter.most_common():
+            print(f"{protocol}: {count} packets")
+        
+        print("\nTop 5 IP addresses:")
+        for ip, count in ip_counter.most_common(5):
+            print(f"{ip}: {count} occurrences")
+        
+        print("\nTop 5 ports:")
+        for port, count in port_counter.most_common(5):
+            print(f"Port {port}: {count} occurrences")
+        
+        return protocol_counter, ip_counter, port_counter
+        
+    except FileNotFoundError:
+        print(f"Error: File '{file_path}' not found")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error analyzing PCAP file: {str(e)}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Network Traffic Analyzer")
     parser.add_argument("-i", "--interface", help="Network interface for live capture")
     parser.add_argument("-f", "--file", help="PCAP file for offline analysis")
-    parser.add_argument("-c", "--count", type=int, default=10, help="Number of packets to capture (default: 10)")
+    parser.add_argument("-c", "--count", type=int, default=10, 
+                        help="Number of packets to capture (default: 10)")
     
     args = parser.parse_args()
     
@@ -42,3 +88,5 @@ if __name__ == "__main__":
         live_capture(args.interface, args.count)
     else:
         print("Please specify either an interface for live capture or a PCAP file for analysis.")
+        parser.print_help()
+        sys.exit(1) 
